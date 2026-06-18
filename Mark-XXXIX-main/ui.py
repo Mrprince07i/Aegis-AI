@@ -24,7 +24,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QBrush, QColor, QConicalGradient, QDragEnterEvent, QDropEvent, QFont,
-    QFontDatabase, QKeySequence, QLinearGradient, QPainter, QPainterPath,
+    QFontDatabase, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath,
     QPen, QPixmap, QPolygonF, QRadialGradient, QShortcut, QTransform,
 )
 from PyQt6.QtWidgets import (
@@ -1003,6 +1003,9 @@ class SciFiHud(QWidget):
                 self._active_tab = i
                 self._pulse(rect)
                 self._emit_action("tab", self._tab_codes[i])
+                self._line_edit.setVisible(i == 0)
+                self._note_edit.setVisible(i == 1)
+                self._task_edit.setVisible(i == 2)
                 return
         for rect, code in self._btn_rects:
             if rect.contains(pos):
@@ -4013,7 +4016,13 @@ class SciFiHud(QWidget):
             p.drawEllipse(QPointF(dx, dy), 3, 3)
 
     # ----- Right column (chat / notes / tasks) -----
+    def _sync_edits(self):
+        self._line_edit.setVisible(self._active_tab == 0)
+        self._note_edit.setVisible(self._active_tab == 1)
+        self._task_edit.setVisible(self._active_tab == 2)
+
     def _draw_right_column(self, p, x, y, w, h):
+        self._sync_edits()
         self._panel(p, x + 14, y + 14, w - 28, h - 28, radius=14)
         if self._active_tab == 1:
             self._draw_notes_panel(p, x, y, w, h)
@@ -4205,9 +4214,7 @@ class SciFiHud(QWidget):
             int(in_x + 8), int(in_y + 2),
             int((in_w - 64) - 16), int(in_h - 4),
         )
-        if self._line_edit.isVisible() and self._active_tab != 0:
-            self._line_edit.hide()
-        elif not self._line_edit.isVisible() and self._ready_chat and self._active_tab == 0:
+        if not self._line_edit.isVisible() and self._ready_chat:
             self._line_edit.show()
         in_path = QPainterPath()
         in_path.addRoundedRect(QRectF(in_x, in_y, in_w - 64, in_h), in_h / 2, in_h / 2)
@@ -5085,6 +5092,7 @@ class SetupOverlay(QWidget):
         self.done.emit(key, self._sel_os)
 
 
+
 # ==================== Main Window ====================
 class MainWindow(QMainWindow):
     _log_sig   = pyqtSignal(str)
@@ -5094,6 +5102,7 @@ class MainWindow(QMainWindow):
     def __init__(self, face_path):
         super().__init__()
         self.setWindowTitle("STARK  -  MARK XXXIX")
+        self.setWindowIcon(QIcon(str(BASE_DIR / "app_icon.png")))
         self.setMinimumSize(_MIN_W, _MIN_H)
         self.resize(_DEFAULT_W, _DEFAULT_H)
 
@@ -5125,6 +5134,7 @@ class MainWindow(QMainWindow):
         self.hud.action_triggered.connect(self._on_hud_action)
 
         self._overlay = None
+
         self._ready = self._check_config()
         if self._ready:
             self.hud._ready_chat = True
@@ -5301,6 +5311,7 @@ class MainWindow(QMainWindow):
 
 
 
+
 # ==================== Root shim + AegisUI ====================
 class _RootShim:
     def __init__(self, app):
@@ -5415,4 +5426,5 @@ class AegisUI:
 
     def clear_recalls(self) -> None:
         self._win.clear_recalls()
+
 
