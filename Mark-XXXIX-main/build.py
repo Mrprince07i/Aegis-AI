@@ -75,6 +75,10 @@ def build(dev_mode=False, upx_dir=None):
         "--clean",
     ]
 
+    # Exclude setuptools to avoid PyInstaller hook incompatibility
+    cmd.extend(["--exclude-module", "setuptools"])
+    cmd.extend(["--exclude-module", "PyQt5"])
+
     if not dev_mode:
         cmd.append("--windowed")
         cmd.append("--onefile")
@@ -183,3 +187,5 @@ if __name__ == "__main__":
 
     create_version_info()
     build(dev_mode=dev_mode, upx_dir=upx_dir)
+
+
