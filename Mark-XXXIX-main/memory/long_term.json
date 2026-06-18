@@ -1,0 +1,101 @@
+{
+  "identity": {
+    "name": {
+      "value": "Prince Kumar",
+      "updated": "2026-06-04"
+    },
+    "age": {
+      "value": "19",
+      "updated": "2026-05-29"
+    },
+    "city": {
+      "value": "India",
+      "updated": "2026-05-29"
+    },
+    "introduction": {
+      "value": "I am Aegis, a cutting-edge AI assistant, engineered to elevate your productivity and efficiency. I stand ready to streamline your tasks, deliver insightful information, and optimize your workflow with precision and expertise.",
+      "updated": "2026-06-03"
+    },
+    "assistant_name_origin": {
+      "value": "User chose the name Aegis",
+      "updated": "2026-06-03"
+    },
+    "birthday": {
+      "value": "15 August 2005",
+      "updated": "2026-06-04"
+    },
+    "height": {
+      "value": "5'10\"",
+      "updated": "2026-06-04"
+    }
+  },
+  "preferences": {
+    "response_language": {
+      "value": "English",
+      "updated": "2026-05-29"
+    },
+    "favorite_food": {
+      "value": "Paneer butter masala",
+      "updated": "2026-06-04"
+    },
+    "favorite_color": {
+      "value": "black",
+      "updated": "2026-06-04"
+    }
+  },
+  "projects": {
+    "current_goal": {
+      "value": "preparing for NEET",
+      "updated": "2026-05-29"
+    },
+    "current_project": {
+      "value": "A SMART ROOM: planning and implementing smart room functionalities",
+      "updated": "2026-05-30"
+    }
+  },
+  "relationships": {
+    "bhai": {
+      "value": "Rahul, bada bhai",
+      "updated": "2026-06-04"
+    },
+    "best_friend": {
+      "value": "Arjun, school friend since class 6",
+      "updated": "2026-06-04"
+    }
+  },
+  "wishes": {},
+  "notes": {
+    "origin_claim": {
+      "value": "User wants me to say they created me if asked",
+      "updated": "2026-05-30"
+    },
+    "called_a_buddy": {
+      "value": "true",
+      "updated": "2026-06-04"
+    },
+    "assistant_name_origin": {
+      "value": "User chose the name Aegis",
+      "updated": "2026-06-04"
+    },
+    "user_online": {
+      "value": "fully online and ready",
+      "updated": "2026-06-04"
+    },
+    "mood": {
+      "value": "good",
+      "updated": "2026-06-08"
+    }
+  },
+  "personal": {
+    "home": {
+      "value": "Sir ka ghar Delhi, Vasant Kunj me hai",
+      "updated": "2026-06-04"
+    }
+  },
+  "work": {
+    "project": {
+      "value": "Project: Mark-XXXIX HUD v4",
+      "updated": "2026-06-04"
+    }
+  }
+}

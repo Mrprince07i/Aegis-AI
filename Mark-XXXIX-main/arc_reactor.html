@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Arc Reactor — Mark XXXIX</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    background: radial-gradient(ellipse at center, #0a0f1a 0%, #000 70%);
+    overflow: hidden;
+    font-family: 'Segoe UI', sans-serif;
+    cursor: crosshair;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 30px;
+  }
+
+  .stage {
+    position: relative;
+    width: 520px;
+    height: 520px;
+    filter: drop-shadow(0 0 60px rgba(80, 200, 255, 0.25));
+  }
+
+  /* Outer rotating ring */
+  .ring-outer {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 4px solid rgba(120, 220, 255, 0.4);
+    box-shadow:
+      inset 0 0 30px rgba(80, 200, 255, 0.3),
+      0 0 30px rgba(80, 200, 255, 0.2);
+    animation: spin 18s linear infinite;
+  }
+
+  .ring-outer::before,
+  .ring-outer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px dashed rgba(150, 230, 255, 0.5);
+  }
+  .ring-outer::before { animation: spin 6s linear infinite reverse; }
+  .ring-outer::after  { animation: spin 3s linear infinite; border-style: dotted; }
+
+  /* Triangle arc segments */
+  .triangles {
+    position: absolute;
+    inset: 0;
+    animation: spin 12s linear infinite;
+  }
+  .tri {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 0; height: 0;
+    border-left: 18px solid transparent;
+    border-right: 18px solid transparent;
+    border-bottom: 30px solid #b8ecff;
+    transform-origin: 0 0;
+    filter: drop-shadow(0 0 8px #7fd6ff);
+  }
+  .tri:nth-child(1) { transform: rotate(0deg)   translate(0, -210px); }
+  .tri:nth-child(2) { transform: rotate(60deg)  translate(0, -210px); }
+  .tri:nth-child(3) { transform: rotate(120deg) translate(0, -210px); }
+  .tri:nth-child(4) { transform: rotate(180deg) translate(0, -210px); }
+  .tri:nth-child(5) { transform: rotate(240deg) translate(0, -210px); }
+  .tri:nth-child(6) { transform: rotate(300deg) translate(0, -210px); }
+
+  /* Middle ring with notches */
+  .ring-middle {
+    position: absolute;
+    inset: 70px;
+    border-radius: 50%;
+    border: 3px solid rgba(140, 220, 255, 0.6);
+    box-shadow:
+      inset 0 0 25px rgba(80, 200, 255, 0.4),
+      0 0 15px rgba(80, 200, 255, 0.3);
+    animation: spin-reverse 10s linear infinite;
+  }
+  .ring-middle::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    background:
+      conic-gradient(
+        from 0deg,
+        transparent 0deg 14deg,
+        rgba(180, 240, 255, 0.7) 14deg 16deg,
+        transparent 16deg 74deg,
+        rgba(180, 240, 255, 0.7) 74deg 76deg,
+        transparent 76deg 134deg,
+        rgba(180, 240, 255, 0.7) 134deg 136deg,
+        transparent 136deg 194deg,
+        rgba(180, 240, 255, 0.7) 194deg 196deg,
+        transparent 196deg 254deg,
+        rgba(180, 240, 255, 0.7) 254deg 256deg,
+        transparent 256deg 314deg,
+        rgba(180, 240, 255, 0.7) 314deg 316deg,
+        transparent 316deg 360deg
+      );
+    filter: drop-shadow(0 0 6px #7fd6ff);
+  }
+
+  /* Inner coil */
+  .coil {
+    position: absolute;
+    inset: 140px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle, rgba(180, 240, 255, 0.9) 0%, rgba(80, 200, 255, 0.4) 40%, transparent 70%);
+    box-shadow:
+      inset 0 0 40px rgba(180, 240, 255, 0.6),
+      inset 0 0 80px rgba(80, 200, 255, 0.4);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  .coil::before {
+    content: "";
+    position: absolute;
+    inset: 20px;
+    border-radius: 50%;
+    border: 2px solid rgba(200, 245, 255, 0.6);
+    animation: spin 4s linear infinite;
+  }
+
+  /* Core */
+  .core {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 90px; height: 90px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, #ffffff 0%, #b8ecff 35%, #4ec5ff 70%, transparent 100%);
+    box-shadow:
+      0 0 30px #ffffff,
+      0 0 60px #7fd6ff,
+      0 0 120px #4ec5ff;
+    animation: core-pulse 1.6s ease-in-out infinite;
+  }
+  .core::after {
+    content: "";
+    position: absolute;
+    inset: 15px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff 0%, #cdeeff 60%, transparent 100%);
+  }
+
+  /* Connecting spokes */
+  .spoke {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 240px;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, #7fd6ff, transparent);
+    transform-origin: 0 50%;
+    filter: drop-shadow(0 0 4px #7fd6ff);
+    opacity: 0.7;
+  }
+  .spoke:nth-child(1) { transform: translate(0, -2px) rotate(30deg); }
+  .spoke:nth-child(2) { transform: translate(0, -2px) rotate(90deg); }
+  .spoke:nth-child(3) { transform: translate(0, -2px) rotate(150deg); }
+  .spoke:nth-child(4) { transform: translate(0, -2px) rotate(210deg); }
+  .spoke:nth-child(5) { transform: translate(0, -2px) rotate(270deg); }
+  .spoke:nth-child(6) { transform: translate(0, -2px) rotate(330deg); }
+
+  /* Particles */
+  .spark {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 3px; height: 3px;
+    background: #b8ecff;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #7fd6ff;
+    animation: orbit 4s linear infinite;
+    opacity: 0.8;
+  }
+  .spark:nth-child(1) { animation-delay: 0s;   animation-duration: 3s; }
+  .spark:nth-child(2) { animation-delay: 0.5s; animation-duration: 4s; }
+  .spark:nth-child(3) { animation-delay: 1s;   animation-duration: 3.5s; }
+  .spark:nth-child(4) { animation-delay: 1.5s; animation-duration: 4.5s; }
+  .spark:nth-child(5) { animation-delay: 2s;   animation-duration: 3s; }
+  .spark:nth-child(6) { animation-delay: 2.5s; animation-duration: 4s; }
+  .spark:nth-child(7) { animation-delay: 0.8s; animation-duration: 3.8s; }
+  .spark:nth-child(8) { animation-delay: 1.8s; animation-duration: 4.2s; }
+
+  /* HUD text */
+  .hud {
+    position: fixed;
+    color: #7fd6ff;
+    font-size: 12px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0.7;
+    text-shadow: 0 0 10px #4ec5ff;
+    user-select: none;
+  }
+  .hud.tl { top: 20px;    left: 20px; }
+  .hud.tr { top: 20px;    right: 20px; text-align: right; }
+  .hud.bl { bottom: 20px; left: 20px; }
+  .hud.br { bottom: 20px; right: 20px; text-align: right; }
+
+  .title {
+    color: #b8ecff;
+    font-size: 14px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    text-shadow: 0 0 15px #4ec5ff;
+    opacity: 0.85;
+  }
+
+  /* Power line */
+  .power-bar {
+    position: relative;
+    width: 520px;
+    height: 4px;
+    background: rgba(80, 200, 255, 0.15);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .power-bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, #7fd6ff, transparent);
+    animation: power 2.4s linear infinite;
+  }
+
+  /* Animations */
+  @keyframes spin         { to { transform: rotate(360deg); } }
+  @keyframes spin-reverse { to { transform: rotate(-360deg); } }
+  @keyframes pulse        { 0%,100% { transform: scale(1);    opacity: 1; }
+                            50%     { transform: scale(1.08); opacity: 0.85; } }
+  @keyframes core-pulse   { 0%,100% { transform: translate(-50%,-50%) scale(1);   }
+                            50%     { transform: translate(-50%,-50%) scale(1.15); } }
+  @keyframes orbit        { from { transform: translate(-50%,-50%) rotate(0deg)   translateX(260px); opacity: 0; }
+                            10%  { opacity: 0.9; }
+                            90%  { opacity: 0.9; }
+                            to   { transform: translate(-50%,-50%) rotate(360deg) translateX(260px); opacity: 0; } }
+  @keyframes power        { from { transform: translateX(-100%); }
+                            to   { transform: translateX(100%); } }
+</style>
+</head>
+<body>
+
+  <div class="hud tl">
+    ⚡ STARK INDUSTRIES<br>
+    REACTOR MODEL — XXXIX
+  </div>
+  <div class="hud tr">
+    OUTPUT: <span id="output">100%</span><br>
+    TEMP:  <span id="temp">--</span> K
+  </div>
+  <div class="hud bl">
+    CORE: ONLINE<br>
+    STATUS: STABLE
+  </div>
+  <div class="hud br">
+    FRAME: <span id="fps">60</span> FPS<br>
+    PWR: 1.21 GW
+  </div>
+
+  <div class="stage">
+    <div class="ring-outer"></div>
+
+    <div class="triangles">
+      <div class="tri"></div><div class="tri"></div><div class="tri"></div>
+      <div class="tri"></div><div class="tri"></div><div class="tri"></div>
+    </div>
+
+    <div class="ring-middle"></div>
+
+    <div class="coil"></div>
+
+    <div class="spoke"></div><div class="spoke"></div><div class="spoke"></div>
+    <div class="spoke"></div><div class="spoke"></div><div class="spoke"></div>
+
+    <div class="spark"></div><div class="spark"></div><div class="spark"></div><div class="spark"></div>
+    <div class="spark"></div><div class="spark"></div><div class="spark"></div><div class="spark"></div>
+
+    <div class="core"></div>
+  </div>
+
+  <div class="power-bar"></div>
+  <div class="title">— ARC REACTOR —</div>
+
+  <script>
+    // Subtle mouse-look parallax tilt
+    const stage = document.querySelector('.stage');
+    document.addEventListener('mousemove', e => {
+      const x = (e.clientX / window.innerWidth  - 0.5) * 8;
+      const y = (e.clientY / window.innerHeight - 0.5) * 8;
+      stage.style.transform = `perspective(800px) rotateY(${x}deg) rotateX(${-y}deg)`;
+    });
+
+    // Faux live readout
+    const temp = document.getElementById('temp');
+    setInterval(() => {
+      const t = (1500 + Math.random() * 30).toFixed(1);
+      temp.textContent = t;
+    }, 700);
+  </script>
+</body>
+</html>

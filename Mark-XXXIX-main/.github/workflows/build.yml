@@ -1,0 +1,110 @@
+﻿name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - "**.md"
+      - ".github/**"
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: "Version bump type (major/minor/patch)"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller requests packaging
+
+      - name: Install Playwright browsers
+        run: python -m playwright install chromium
+
+      - name: Bump version (manual trigger only)
+        if: github.event_name == 'workflow_dispatch'
+        shell: python
+        run: |
+          import re
+
+          with open("version.py", "r") as f:
+            content = f.read()
+
+          version_match = re.search(r'__version__\s*=\s*"(\d+)\.(\d+)\.(\d+)"', content)
+          if not version_match:
+            print("Could not find version string")
+            exit(1)
+
+          major, minor, patch = int(version_match[1]), int(version_match[2]), int(version_match[3])
+          bump = "${{ github.event.inputs.version_bump }}"
+          if bump == "major":
+            major += 1; minor = 0; patch = 0
+          elif bump == "minor":
+            minor += 1; patch = 0
+          else:
+            patch += 1
+
+          new_version = f"{major}.{minor}.{patch}"
+          new_code = major * 10000 + minor * 100 + patch
+          content = re.sub(r'__version__\s*=\s*"\d+\.\d+\.\d+"', f'__version__ = "{new_version}"', content)
+          content = re.sub(r'__version_code__\s*=\s*\d+', f'__version_code__ = {new_code}', content)
+
+          with open("version.py", "w") as f:
+            f.write(content)
+
+          print(f"Version bumped to {new_version}")
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+            f.write(f"RELEASE_VERSION=v{new_version}\n")
+
+      - name: Get version
+        if: github.event_name != 'workflow_dispatch'
+        shell: python
+        run: |
+          import re, os
+          with open("version.py", "r") as f:
+            content = f.read()
+          version_match = re.search(r'__version__\s*=\s*"(.+?)"', content)
+          if version_match:
+            ver = version_match[1]
+            with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"RELEASE_VERSION=v{ver}\n")
+            print(f"Version: v{ver}")
+
+      - name: Build executable
+        run: python build.py
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          name: "Aegis ${{ env.RELEASE_VERSION }}"
+          body: |
+            Automated build from commit ${{ github.sha }}
+            Commit message: ${{ github.event.head_commit.message }}
+          files: dist/Aegis.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: true
