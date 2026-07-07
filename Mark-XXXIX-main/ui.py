@@ -525,6 +525,7 @@ class SciFiHud(QWidget):
         self._wave_source: str          = "idle"           # idle | user | aegis
         self._wave_rect: QRectF         = QRectF()
         self._wave_label_rect: QRectF   = QRectF()
+        self._agent_status: dict[str, str] = {}
         self._cards_scrollbar_rect: QRectF = QRectF()
         self._cards_scrollbar_thumb: QRectF = QRectF()
         self._dragging_scrollbar = False
@@ -1947,20 +1948,50 @@ class SciFiHud(QWidget):
             p.drawText(sub_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                        card["sub"])
 
-            # ── Data text ──
-            data_texts = [
-                ["req: 12", "perf: 94%"],
-                ["if→then", "chk: OK"],
-                ["docs: 8", "cloud: 3"],
-                ["ctx: 2.1k", "mem: 87%"],
-                ["run: ✓", "code: 4"],
-                ["status:", "SUCCESS"],
+            # ── Status indicator ──
+            agent_keys = ["target", "logic", "knowledge", "brain", "executor", "validator"]
+            status = self._agent_status.get(agent_keys[i], "idle")
+            status_color = {
+                "running": "#ffb347",
+                "completed": "#4ade80",
+                "failed": "#ff3a5c",
+            }.get(status, C.TEXT_DIM)
+
+            # Animated pulse when running
+            if status == "running":
+                pulse_r = 2.5 + 1.5 * math.sin(tp * 6 + i * 1.5)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(qcol(status_color, int(100 + 80 * math.sin(tp * 5 + i)))))
+                p.drawEllipse(QPointF(cx + cw - 8, cy + 8), pulse_r, pulse_r)
+
+            # Status text
+            p.setFont(QFont("Consolas", 5))
+            p.setPen(QPen(qcol(status_color, 200), 1))
+            status_rect = QRectF(cx + cw - 40, cy + 6, 36, 8)
+            p.drawText(status_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                       status.upper())
+
+            # ── Agent status data ──
+            status_texts = [
+                ["target", "logic", "knowledge", "brain", "executor", "validator"],
             ]
+            display_texts = []
+            for sk in agent_keys:
+                s = self._agent_status.get(sk, "⏳ idle")
+                if s == "running":
+                    display_texts.append("▶ running")
+                elif s == "completed":
+                    display_texts.append("✓ done")
+                elif "failed" in s:
+                    display_texts.append("✗ failed")
+                else:
+                    display_texts.append("○ standby")
+
             p.setFont(QFont("Consolas", 5))
             p.setPen(QPen(qcol(C.TEXT_DIM, 140), 1))
-            for li, dt in enumerate(data_texts[i]):
-                dr = QRectF(cx + 4, icon_y + 38 + li * 9, cw - 8, 8)
-                p.drawText(dr, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, dt)
+            dr = QRectF(cx + 4, icon_y + 36, cw - 8, 8)
+            p.drawText(dr, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                       display_texts[i])
 
             # ── Glowing number circle at bottom ──
             num_y = cy + ch - 12

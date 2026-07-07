@@ -1,4 +1,5 @@
-﻿import asyncio
+import asyncio
+import os
 import re
 import threading
 import json
@@ -6,6 +7,7 @@ import sys
 import math
 import traceback
 from pathlib import Path
+
 
 import sounddevice as sd
 from google import genai
@@ -38,6 +40,7 @@ from actions.calendar_manager  import calendar_manager
 from actions.notes_manager     import notes_manager
 from actions.task_manager      import task_manager
 from actions.focus_timer       import focus_timer
+from actions.predictive_suggest import predictive_suggest
 
 
 def get_base_dir():
@@ -67,7 +70,8 @@ def _load_system_prompt() -> str:
         return (
             "You are Aegis, a cutting-edge personal AI assistant. "
             "Be concise, direct, and always use the provided tools to complete tasks. "
-            "Never simulate or guess results â€” always call the appropriate tool."
+            "Never simulate or guess results \u2014 always call the appropriate tool. "
+
         )
 
 _CTRL_RE = re.compile(r"<ctrl\d+>", re.IGNORECASE)
@@ -83,7 +87,7 @@ TOOL_DECLARATIONS = [
         "description": (
             "Opens any application on the computer. "
             "Use this whenever the user asks to open, launch, or start any app, "
-            "website, or program. Always call this tool â€” never just say you opened it."
+            "website, or program. Always call this tool � never just say you opened it."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -172,7 +176,7 @@ TOOL_DECLARATIONS = [
             "MUST be called when user asks what is on screen, what you see, "
             "analyze my screen, look at camera, etc. "
             "You have NO visual ability without this tool. "
-            "After calling this tool, stay SILENT â€” the vision module speaks directly."
+            "After calling this tool, stay SILENT — the vision module speaks directly."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -298,15 +302,31 @@ TOOL_DECLARATIONS = [
     {
         "name": "agent_task",
         "description": (
-            "Executes complex multi-step tasks requiring multiple different tools. "
-            "Examples: 'research X and save to file', 'find and organize files'. "
-            "DO NOT use for single commands. NEVER use for Steam/Epic â€” use game_updater."
+            "Legacy simple task executor for basic multi-step tasks. "
+            "For COMPLEX tasks requiring research, memory, planning, or multiple specialized capabilities, "
+            "use 'agent_delegate' instead."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "goal":     {"type": "STRING", "description": "Complete description of what to accomplish"},
                 "priority": {"type": "STRING", "description": "low | normal | high (default: normal)"}
+            },
+            "required": ["goal"]
+        }
+    },
+    {
+        "name": "agent_delegate",
+        "description": (
+            "THE PRIMARY tool for complex or hard tasks. Delegates to 6 specialized agents "
+            "(Target, Logic, Knowledge, Brain, Executor, Validator) who work together "
+            "to accomplish the goal. Use for: research, analysis, multi-step workflows, "
+            "creative tasks, problem-solving. Do NOT use for simple single-command tasks."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "goal": {"type": "STRING", "description": "Complete task description of what to accomplish"}
             },
             "required": ["goal"]
         }
@@ -377,7 +397,7 @@ TOOL_DECLARATIONS = [
         }
     },
     {
-        "name": "shutdown_jarvis",
+        "name": "shutdown_aegis",
         "description": (
             "Shuts down the assistant completely. "
             "Call this when the user expresses intent to end the conversation, "
@@ -559,7 +579,7 @@ TOOL_DECLARATIONS = [
         "name": "save_memory",
         "description": (
             "Save an important personal fact about the user to long-term memory. "
-            "CALL THIS PROACTIVELY after every user message â€” if the user reveals "
+            "CALL THIS PROACTIVELY after every user message — if the user reveals "
             "any personal fact (name, age, city, job, family member, preference, "
             "project, future plan, opinion, habit, etc.), call this tool SILENTLY "
             "before or alongside your reply. Do NOT announce that you are saving. "
@@ -574,12 +594,12 @@ TOOL_DECLARATIONS = [
                 "category": {
                     "type": "STRING",
                     "description": (
-                        "identity â€” name, age, birthday, city, job, school, language, nationality | "
-                        "preferences â€” favorite food/color/music/film/game/sport, hobbies, habits | "
-                        "projects â€” active projects, study goals, things being built | "
-                        "relationships â€” friends, family, partner, colleagues (e.g. sister_name, friend_rahul) | "
-                        "wishes â€” future plans, things to buy, travel dreams | "
-                        "notes â€” opinions, mood, schedule, recurring topics, anything else"
+                        "identity — name, age, birthday, city, job, school, language, nationality | "
+                        "preferences — favorite food/color/music/film/game/sport, hobbies, habits | "
+                        "projects — active projects, study goals, things being built | "
+                        "relationships — friends, family, partner, colleagues (e.g. sister_name, friend_rahul) | "
+                        "wishes — future plans, things to buy, travel dreams | "
+                        "notes — opinions, mood, schedule, recurring topics, anything else"
                     )
                 },
                 "key":   {"type": "STRING", "description": "Short snake_case key (e.g. name, favorite_food, sister_name, current_goal)"},
@@ -595,7 +615,7 @@ TOOL_DECLARATIONS = [
             "USE THIS whenever the user asks about something personal they told you before, "
             "their preferences, relationships, projects, or any previously-saved fact. "
             "Examples: 'what's my sister's name?', 'do you remember my favorite food?', "
-            "'what are my projects?', 'where do I live?', 'what did I say aboutâ€¦'. "
+            "'what are my projects?', 'where do I live?', 'what did I say about…'. "
             "Use empty query or 'all' to list everything on file. "
             "Always include 1-2 keyword(s) from the user's question, NOT the full question. "
             "Quote the returned facts naturally in your reply."
@@ -614,7 +634,7 @@ TOOL_DECLARATIONS = [
                 "category": {
                     "type": "STRING",
                     "description": (
-                        "Optional filter â€” restrict search to one category: "
+                        "Optional filter — restrict search to one category: "
                         "identity | preferences | projects | relationships | wishes | notes. "
                         "Omit to search all categories."
                     )
@@ -632,7 +652,7 @@ TOOL_DECLARATIONS = [
         "description": (
             "Switches the HUD's operational mode, which reveals (or hides) the "
             "Dynamic Island at the top of the centre screen. Use this when the "
-            "user asks to switch, activate, change, or exit a mode â€” e.g. "
+            "user asks to switch, activate, change, or exit a mode — e.g. "
             "'switch to overdrive', 'go focus mode', 'stealth on', 'disable the "
             "island', 'back to normal'. Modes: standard (default, island hidden), "
             "overdrive (combat/intense, red), focus (calm deep work, blue), "
@@ -702,6 +722,22 @@ TOOL_DECLARATIONS = [
             "required": []
         }
     },
+    {
+        "name": "predictive_suggest",
+        "description": (
+            "Analyzes the current context — time, day, pending tasks, today's calendar events, "
+            "and the user's known habits/routines from memory — then returns a structured summary "
+            "so you can make smart, proactive suggestions. "
+            "Call this at startup (after greeting) and periodically to offer useful suggestions "
+            "like 'Sir, aap usually 7pm gym jaate ho, aaj bhi chaloge?' or "
+            "'Kal aapki meeting hai, uski tayyari karni hai?'"
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {},
+            "required": []
+        }
+    },
 ]
 
 class AegisLive:
@@ -722,7 +758,7 @@ class AegisLive:
         self._turn_done_event: asyncio.Event | None = None
         self._greeted       = False   # sirf pehli baar greet karne ke liye
         self._latest_update = None    # latest update info from check_update
-        # â”€â”€ Reasoning Trace + Proactive Recall config â”€â”€
+        # ── Reasoning Trace + Proactive Recall config ──
         self._show_trace      = True
         self._proactive_recall = True
         try:
@@ -770,9 +806,9 @@ class AegisLive:
                     self.ui.add_recall(user_text[:40], line)
                     break
         except Exception as e:
-            print(f"[JARVIS] proactive recall error: {e}")
+            print(f"[AEGIS] proactive recall error: {e}")
 
-    # â”€â”€ Auto-pin helpers (used after relevant tool calls) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Auto-pin helpers (used after relevant tool calls) ─────────────
     def _autopin_weather(self, args: dict, result: str):
         try:
             city = (args.get("city") or "Weather").strip()
@@ -780,9 +816,9 @@ class AegisLive:
             temp = ""
             cond = ""
             hum  = ""
-            # crude parse: look for "XÂ°C" and any words after
+            # crude parse: look for "X°C" and any words after
             import re as _re
-            m_t = _re.search(r"(-?\d+)\s*Â°?\s*C", text)
+            m_t = _re.search(r"(-?\d+)\s*°?\s*C", text)
             if m_t: temp = m_t.group(0)
             # condition: first sentence after temp
             tail = text
@@ -793,8 +829,8 @@ class AegisLive:
             # humidity
             m_h = _re.search(r"(\d{1,3})\s*%", text)
             if m_h: hum = m_h.group(0)
-            self.ui.pin_card("weather", f"{city} Â· {temp or 'Weather'}",
-                             {"city": city, "temp": temp or "â€”",
+            self.ui.pin_card("weather", f"{city} · {temp or 'Weather'}",
+                             {"city": city, "temp": temp or "—",
                               "condition": cond, "humidity": hum})
         except Exception as e:
             print(f"[autopin] weather failed: {e}")
@@ -802,18 +838,18 @@ class AegisLive:
     def _autopin_search(self, args: dict, result: str):
         try:
             query = (args.get("query") or "Search").strip()
-            # Parse first 3 result lines: typical format "Title â€” URL"
+            # Parse first 3 result lines: typical format "Title — URL"
             results = []
             for line in (result or "").splitlines():
-                line = line.strip(" -â€¢\t")
+                line = line.strip(" -•\t")
                 if not line or len(line) < 8:
                     continue
                 if "http" in line:
                     parts = line.rsplit("http", 1)
-                    title = parts[0].strip(" -â€”") or "Result"
+                    title = parts[0].strip(" -—") or "Result"
                     url   = "http" + parts[1]
-                elif " â€” " in line:
-                    parts = line.split(" â€” ", 1)
+                elif " — " in line:
+                    parts = line.split(" — ", 1)
                     title, url = parts[0].strip(), parts[1].strip()
                 elif " - " in line:
                     parts = line.split(" - ", 1)
@@ -890,13 +926,13 @@ class AegisLive:
     def _on_text_command(self, text: str):
         if not self._loop or not self.session:
             return
-        # Proactive memory recall â€” runs before sending to LLM
+        # Proactive memory recall — runs before sending to LLM
         try:
             self._maybe_proactive_recall(text)
         except Exception:
             pass
         # Trace the user input
-        self._emit_trace("thought", "user â†’ " + (text[:80] if text else ""))
+        self._emit_trace("thought", "user → " + (text[:80] if text else ""))
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
                 turns={"parts": [{"text": text}]},
@@ -1004,7 +1040,7 @@ class AegisLive:
 
     def speak_error(self, tool_name: str, error: str):
         short = str(error)[:120]
-        self.ui.write_log(f"ERR: {tool_name} â€” {short}")
+        self.ui.write_log(f"ERR: {tool_name} — {short}")
         self.speak(f"Sir, {tool_name} encountered an error. {short}")
 
     def _build_config(self) -> types.LiveConnectConfig:
@@ -1015,7 +1051,7 @@ class AegisLive:
         sys_prompt = _load_system_prompt()
 
         now      = datetime.now()
-        time_str = now.strftime("%A, %B %d, %Y â€” %I:%M %p")
+        time_str = now.strftime("%A, %B %d, %Y — %I:%M %p")
         time_ctx = (
             f"[CURRENT DATE & TIME]\n"
             f"Right now it is: {time_str}\n"
@@ -1047,7 +1083,7 @@ class AegisLive:
         name = fc.name
         args = dict(fc.args or {})
 
-        print(f"[JARVIS] ðŸ”§ {name}  {args}")
+        print(f"[AEGIS] 🔧 {name}  {args}")
         self.ui.set_state("THINKING")
         self.ui.notify_tool(name)
         # Trace: tool call starting
@@ -1060,7 +1096,7 @@ class AegisLive:
             value    = args.get("value", "")
             if key and value:
                 update_memory({category: {key: {"value": value}}})
-                print(f"[Memory] ðŸ’¾ save_memory: {category}/{key} = {value}")
+                print(f"[Memory] 💾 save_memory: {category}/{key} = {value}")
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
             return types.FunctionResponse(
@@ -1077,9 +1113,9 @@ class AegisLive:
             except Exception as e:
                 result = f"Recall failed: {e}"
                 traceback.print_exc()
-            print(f"[Memory] ðŸ” recall_memory: query='{query}' cat='{category}' â†’ {len(result)} chars")
-            self.ui.write_log(f"SYS: Memory recall â€” '{query[:40]}'")
-            # Don't speak â€” return the result so the LLM can quote it naturally.
+            print(f"[Memory] 🔍 recall_memory: query='{query}' cat='{category}' → {len(result)} chars")
+            self.ui.write_log(f"SYS: Memory recall — '{query[:40]}'")
+            # Don't speak — return the result so the LLM can quote it naturally.
             return types.FunctionResponse(
                 id=fc.id, name=name,
                 response={"result": result, "silent": True}
@@ -1093,7 +1129,7 @@ class AegisLive:
             else:
                 from ui import MODES as _MODES
                 result = f"Mode switched to {_MODES[mode]['name']}."
-            print(f"[HUD] ðŸŽ¨ switch_mode â†’ {mode}  ok={ok}")
+            print(f"[HUD] 🎨 switch_mode → {mode}  ok={ok}")
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
             return types.FunctionResponse(
@@ -1112,7 +1148,7 @@ class AegisLive:
                 traceback.print_exc()
             else:
                 result = f"Pinned {ctype} card '{ctitle}' (id={card_id})."
-                print(f"[HUD] ðŸ“Œ pin_card â†’ {ctype} '{ctitle}'")
+                print(f"[HUD] 📌 pin_card → {ctype} '{ctitle}'")
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
             return types.FunctionResponse(
@@ -1130,7 +1166,7 @@ class AegisLive:
             else:
                 ok = self.ui.unpin_card(cid)
                 result = f"Unpinned {cid}." if ok else f"No such card: {cid}"
-            print(f"[HUD] ðŸ“ unpin_card â†’ {cid}")
+            print(f"[HUD] 📍 unpin_card → {cid}")
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
             return types.FunctionResponse(
@@ -1180,7 +1216,7 @@ class AegisLive:
                             "player": self.ui, "session_memory": None},
                     daemon=True
                 ).start()
-                result = "Vision module activated. Stay completely silent â€” vision module will speak directly."
+                result = "Vision module activated. Stay completely silent — vision module will speak directly."
 
             elif name == "computer_settings":
                 r = await loop.run_in_executor(None, lambda: computer_settings(parameters=args, response=None, player=self.ui))
@@ -1204,6 +1240,18 @@ class AegisLive:
                 priority = priority_map.get(args.get("priority", "normal").lower(), TaskPriority.NORMAL)
                 task_id  = get_queue().submit(goal=args.get("goal", ""), priority=priority, speak=self.speak)
                 result   = f"Task started (ID: {task_id})."
+
+            elif name == "agent_delegate":
+                from agent.manager import get_manager
+                goal = args.get("goal", "")
+                self.ui.write_log(f"SYS: Deploying multi-agent pipeline for: {goal[:60]}")
+                mgr = get_manager()
+                def progress(name, status):
+                    self.ui._agent_status = mgr.get_pipeline_status()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: mgr.run_pipeline(goal=goal, speak=self.speak, progress_cb=progress)
+                )
 
             elif name == "web_search":
                 r = await loop.run_in_executor(None, lambda: web_search_action(parameters=args, player=self.ui))
@@ -1230,7 +1278,7 @@ class AegisLive:
                 r = await loop.run_in_executor(None, lambda: flight_finder(parameters=args, player=self.ui))
                 result = r or "Done."
 
-            elif name == "shutdown_jarvis":
+            elif name == "shutdown_aegis":
                 self.ui.write_log("SYS: Shutdown requested.")
                 self.speak("Goodbye, sir.")
                 def _shutdown():
@@ -1314,6 +1362,13 @@ class AegisLive:
                     except Exception as e:
                         result = f"Update failed: {e}"
 
+            elif name == "predictive_suggest":
+                r = await loop.run_in_executor(
+                    None,
+                    lambda: predictive_suggest(parameters=args, player=self.ui)
+                )
+                result = r or "No suggestions available."
+
             else:
                 result = f"Unknown tool: {name}"
 
@@ -1325,10 +1380,10 @@ class AegisLive:
         if not self.ui.muted:
             self.ui.set_state("LISTENING")
 
-        print(f"[JARVIS] ðŸ“¤ {name} â†’ {str(result)[:80]}")
+        print(f"[AEGIS] 📤 {name} → {str(result)[:80]}")
         # Trace: tool call result
         result_kind = "result" if "fail" not in str(result).lower() and "error" not in str(result).lower() else "error"
-        self._emit_trace(result_kind, f"{name} â†’ {str(result)[:60]}")
+        self._emit_trace(result_kind, f"{name} → {str(result)[:60]}")
         self.ui.notify_tool("")
         return types.FunctionResponse(
             id=fc.id, name=name,
@@ -1341,7 +1396,7 @@ class AegisLive:
             await self.session.send_realtime_input(media=msg)
 
     async def _listen_audio(self):
-        print("[JARVIS] ðŸŽ¤ Mic started")
+        print("[AEGIS] 🎤 Mic started")
         loop = asyncio.get_event_loop()
 
         def callback(indata, frames, time_info, status):
@@ -1362,15 +1417,15 @@ class AegisLive:
                 blocksize=CHUNK_SIZE,
                 callback=callback,
             ):
-                print("[JARVIS] ðŸŽ¤ Mic stream open")
+                print("[AEGIS] 🎤 Mic stream open")
                 while True:
                     await asyncio.sleep(0.1)
         except Exception as e:
-            print(f"[JARVIS] âŒ Mic: {e}")
+            print(f"[AEGIS] ❌ Mic: {e}")
             raise
 
     async def _receive_audio(self):
-        print("[JARVIS] ðŸ‘‚ Recv started")
+        print("[AEGIS] 👂 Recv started")
         out_buf, in_buf = [], []
 
         try:
@@ -1412,19 +1467,19 @@ class AegisLive:
                     if response.tool_call:
                         fn_responses = []
                         for fc in response.tool_call.function_calls:
-                            print(f"[JARVIS] ðŸ“ž {fc.name}")
+                            print(f"[AEGIS] 📞 {fc.name}")
                             fr = await self._execute_tool(fc)
                             fn_responses.append(fr)
                         await self.session.send_tool_response(
                             function_responses=fn_responses
                         )
         except Exception as e:
-            print(f"[JARVIS] âŒ Recv: {e}")
+            print(f"[AEGIS] ❌ Recv: {e}")
             traceback.print_exc()
             raise
 
     async def _play_audio(self):
-        print("[JARVIS] ðŸ”Š Play started")
+        print("[AEGIS] 🔊 Play started")
 
         stream = sd.RawOutputStream(
             samplerate=RECEIVE_SAMPLE_RATE,
@@ -1466,26 +1521,13 @@ class AegisLive:
                     pass
                 await asyncio.to_thread(stream.write, chunk)
         except Exception as e:
-            print(f"[JARVIS] âŒ Play: {e}")
+            print(f"[AEGIS] ❌ Play: {e}")
             raise
         finally:
             self.set_speaking(False)
             self.ui.set_audio_level(0.0)
             stream.stop()
             stream.close()
-
-    def _get_greeting(self) -> str:
-        """Time ke hisab se greeting banata hai."""
-        from datetime import datetime
-        hour = datetime.now().hour
-        if 5 <= hour < 12:
-            return "Good Morning"
-        elif 12 <= hour < 17:
-            return "Good Afternoon"
-        elif 17 <= hour < 21:
-            return "Good Evening"
-        else:
-            return "Good Night"
 
     def _should_show_news_today(self) -> bool:
         """Check karo ki aaj news pehle se dikhayi hai ya nahi."""
@@ -1511,33 +1553,33 @@ class AegisLive:
             with open(news_file, "w", encoding="utf-8") as f:
                 json.dump({"last_news_date": str(date.today())}, f)
         except Exception as e:
-            print(f"[JARVIS] \u26a0\ufe0f Could not save news date: {e}")
+            print(f"[AEGIS] \u26a0\ufe0f Could not save news date: {e}")
 
     async def _send_startup_greeting(self):
-        """Pehli baar connect hone par greet karo aur din mein sirf ek baar news bolo."""
+        """Pehli baar connect hone par greet karo, pending tasks yaad dilao, aur news bolo."""
         if self._greeted:
             return
         self._greeted = True
 
-        await asyncio.sleep(1.5)  # session stable hone do
-
-        greeting = self._get_greeting()
-        from datetime import datetime
-        now = datetime.now()
-        time_str = now.strftime("%I:%M %p")
+        await asyncio.sleep(1.5)
 
         show_news = self._should_show_news_today()
 
         if show_news:
             startup_msg = (
-                f"{greeting}, sir! The time is {time_str}. "
-                f"I'm fully online and ready. "
-                f"Let me quickly fetch today's top news headlines for you."
+                "STARTUP SEQUENCE: Now follow your PERSONAL ASSISTANT greeting protocol. "
+                "First greet me based on the current time, then check my pending tasks "
+                "using task_manager(list) and tell me what's still pending from before. "
+                "Give me a smart suggestion for today. "
+                "Then search the web and tell me the top 3 latest news headlines "
+                "from India and the world right now. Keep it very brief."
             )
         else:
             startup_msg = (
-                f"{greeting}, sir! The time is {time_str}. "
-                f"I'm fully online and ready. How can I help you?"
+                "STARTUP SEQUENCE: Now follow your PERSONAL ASSISTANT greeting protocol. "
+                "First greet me based on the current time, then check my pending tasks "
+                "using task_manager(list) and tell me what's still pending from before. "
+                "Give me a smart suggestion for today."
             )
 
         await self.session.send_client_content(
@@ -1546,17 +1588,6 @@ class AegisLive:
         )
 
         if show_news:
-            # News ke liye thoda wait karo (greet complete ho)
-            await asyncio.sleep(8)
-
-            news_msg = (
-                "Now please search the web and tell me the top 3 latest news headlines "
-                "from India and the world right now. Keep it very brief \u2014 just the headlines."
-            )
-            await self.session.send_client_content(
-                turns={"parts": [{"text": news_msg}]},
-                turn_complete=True
-            )
             self._mark_news_shown()
 
     async def run(self):
@@ -1567,7 +1598,7 @@ class AegisLive:
 
         while True:
             try:
-                print("[JARVIS] Connecting...")
+                print("[AEGIS] Connecting...")
                 self.ui.set_state("THINKING")
                 config = self._build_config()
 
@@ -1581,9 +1612,9 @@ class AegisLive:
                     self.out_queue      = asyncio.Queue(maxsize=10)
                     self._turn_done_event = asyncio.Event()
 
-                    print("[JARVIS] Connected.")
+                    print("[AEGIS] Connected.")
                     self.ui.set_state("LISTENING")
-                    self.ui.write_log("SYS: JARVIS online.")
+                    self.ui.write_log("SYS: AEGIS online.")
 
                     tg.create_task(self._send_realtime())
                     tg.create_task(self._listen_audio())
@@ -1592,11 +1623,11 @@ class AegisLive:
                     tg.create_task(self._send_startup_greeting())
 
             except Exception as e:
-                print(f"[JARVIS] Error: {e}")
+                print(f"[AEGIS] Error: {e}")
                 traceback.print_exc()
             self.set_speaking(False)
             self.ui.set_state("THINKING")
-            print("[JARVIS] Reconnecting in 3s...")
+            print("[AEGIS] Reconnecting in 3s...")
             await asyncio.sleep(3)
 
 def _check_update_background(ui):
