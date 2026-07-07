@@ -534,7 +534,7 @@ class SciFiHud(QWidget):
         self._card_ttl = 5.0
 
         self._line_edit = QLineEdit(self)
-        self._line_edit.setPlaceholderText("Ask JARVIS anything...")
+        self._line_edit.setPlaceholderText("Ask Aegis anything...")
         self._line_edit.setFont(QFont("Courier New", 10))
         self._line_edit.setStyleSheet(
             "QLineEdit { background: transparent; color: " + C.TEXT + ";"
@@ -943,7 +943,7 @@ class SciFiHud(QWidget):
         up = text.upper()
         if up.startswith("ERR"):       kind = "error"
         elif up.startswith("YOU:"):    kind = "user"
-        elif up.startswith("JARVIS"):  kind = "assistant"
+        elif up.startswith("AEGIS"):  kind = "assistant"
         elif up.startswith("SYS"):     kind = "system"
         self._log.append({"text": text, "kind": kind, "time": datetime.now()})
         if len(self._log) > self._max_log:
@@ -982,13 +982,6 @@ class SciFiHud(QWidget):
                 if rect.contains(pos):
                     self.unpin_card(cid)
                     return
-        # 3b. Quick Waveform click → cycle mic source label
-        if not self._wave_rect.isEmpty() and self._wave_rect.contains(pos):
-            self._pulse(self._wave_rect)
-            order = ["idle", "user", "aegis"]
-            i = order.index(self._wave_source) if self._wave_source in order else 0
-            self._wave_source = order[(i + 1) % len(order)]
-            return
         if self._line_edit.isVisible() and self._input_rect.contains(pos):
             self._line_edit.setFocus()
             return
@@ -1281,7 +1274,6 @@ class SciFiHud(QWidget):
                 self._draw_center_top(p, center_x, center_y, center_w, H - center_y - BOT_H)
 
                 bot_y = H - BOT_H
-                self._draw_waveform(p, LEFT_W + 20, bot_y + 14, center_w - 360, 30)
                 self._draw_terminal_log(p, W - RIGHT_W - 320, bot_y + 8, 300, BOT_H - 16)
 
                 self._draw_pulses(p)
@@ -1732,14 +1724,8 @@ class SciFiHud(QWidget):
         self._draw_data_flow(p, laptop_x + laptop_w, laptop_y + laptop_h / 2,
                               compass_x, compass_cy)
 
-        # ── LOWER: Voice Waveform Visualizer ──
-        panel_x = x + margin
-        panel_y = lo_y
-        panel_w = w - margin * 2
-        panel_h = lo_h
-        self._wave_rect = QRectF(panel_x, panel_y, panel_w, panel_h)
-        self._draw_voice_waveform(p, panel_x, panel_y, panel_w, panel_h)
-
+        # ── LOWER: Pipeline Flow (6-card data processing pipeline) ──
+        self._draw_pipeline_flow(p, x + margin, lo_y, w - margin * 2, lo_h)
         # Terminate button at the very bottom
         term_cy = y + h - term_h / 2 - 4
         term_cx = x + w / 2
@@ -1747,174 +1733,246 @@ class SciFiHud(QWidget):
         self._draw_corner_brackets(p, self._term_rect, 6, C.DANGER, 220)
         self._terminate_button(p, term_cx, term_cy)
 
-    # ── Voice Waveform Visualizer (lower half of center column) ─────
-    def _draw_voice_waveform(self, p, x, y, w, h):
-        """Always-alive animated visualizer:
-          - 48 spectrum bars shifting left each frame
-          - Oscilloscope-style line trace at the bottom
-          - Peak-hold markers (thin red caps on each bar)
-          - Color shifts with source (user=orange, aegis=cyan, idle=blue)
-          - Header label + dB readout + corner brackets
-        Click anywhere on the panel to cycle source: idle → user → aegis."""
+    # ── Pipeline Flow (6-card data processing pipeline) ──────────────
+    def _draw_pipeline_flow(self, p, x, y, w, h):
+        """Futuristic linear data processing pipeline with 6 agent cards."""
         mode = MODES.get(self._mode, MODES["standard"])
-        prim = mode["primary"]; acc = mode["accent"]
+        prim = mode["primary"]
+        tp = self._time_phase
 
-        # Source colors
-        if self._wave_source == "user":
-            bar_color = "#ff9d3a"; line_color = "#ff7a1f"
-            src_label = "USER MIC"
-        elif self._wave_source == "aegis":
-            bar_color = "#4be8ff"; line_color = "#1ec8e6"
-            src_label = "AEGIS TTS"
-        else:
-            bar_color = qcol(prim); line_color = qcol(acc)
-            src_label = "IDLE STANDBY"
-
-        # ── Panel frame ──
+        # ── Panel background ──
         panel_path = QPainterPath()
-        panel_path.addRoundedRect(QRectF(x, y, w, h), 10, 10)
-        p.setPen(QPen(qcol(prim, 110), 1.0))
-        p.setBrush(QBrush(qcol("#0a1322", 200)))
+        panel_path.addRoundedRect(QRectF(x, y, w, h), 8, 8)
+        p.setPen(QPen(qcol(prim, 60), 1.0))
+        p.setBrush(QBrush(qcol("#080c18", 220)))
         p.drawPath(panel_path)
-        # Top glow strip
-        glow_strip = QLinearGradient(x, y, x, y + 16)
-        glow_strip.setColorAt(0.0, qcol(bar_color, 60))
-        glow_strip.setColorAt(1.0, qcol(bar_color, 0))
-        clip_top = QPainterPath()
-        clip_top.addRoundedRect(QRectF(x + 1, y + 1, w - 2, 16), 9, 9)
-        p.save()
-        p.setClipPath(clip_top)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(glow_strip))
-        p.drawRect(QRectF(x, y, w, 16))
-        p.restore()
 
-        # ── Header ──
-        p.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
-        p.setPen(QPen(qcol(bar_color, 230), 1))
-        p.drawText(QRectF(x + 12, y + 4, 220, 14),
-                   Qt.AlignmentFlag.AlignVCenter, "▮ VOICE WAVEFORM")
-        # Source pill
-        pill_w = 96
-        pill_h = 14
-        pill_x = x + 12
-        pill_y = y + 22
-        pill_rect = QRectF(pill_x, pill_y, pill_w, pill_h)
-        p.setPen(QPen(qcol(bar_color, 180), 0.8))
-        p.setBrush(QBrush(qcol(bar_color, 30)))
-        p.drawRoundedRect(pill_rect, 4, 4)
-        # pulsing dot
-        dot_r = 3
-        dot_cx = pill_x + 8
-        dot_cy = pill_y + pill_h / 2
-        pulse = 0.6 + 0.4 * math.sin(self._time_phase * 4.0)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(qcol(bar_color, int(255 * pulse))))
-        p.drawEllipse(QPointF(dot_cx, dot_cy), dot_r, dot_r)
-        p.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
-        p.setPen(QPen(qcol(bar_color, 230), 1))
-        p.drawText(QRectF(pill_x + 16, pill_y, pill_w - 20, pill_h),
-                   Qt.AlignmentFlag.AlignVCenter, src_label)
+        # Subtle grid
+        p.setPen(QPen(qcol(prim, 15), 0.5))
+        for gx in range(int(x), int(x + w), 20):
+            p.drawLine(QPointF(gx, y), QPointF(gx, y + h))
+        for gy in range(int(y), int(y + h), 20):
+            p.drawLine(QPointF(x, gy), QPointF(x + w, gy))
 
-        # Right-side readout: dB + level
-        db_val = -60 + self._wave_level * 60
-        right_text = f"{db_val:+.1f} dB   L:{int(self._wave_level * 100):3d}%"
-        p.setFont(QFont("Consolas", 7))
-        p.setPen(QPen(qcol(prim, 200), 1))
-        p.drawText(QRectF(x + w - 160, y + 4, 148, 14),
-                   Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                   right_text)
+        # ── Card definitions ──
+        cards = [
+            {"title": "The Target",   "sub": "INPUT",       "num": 1, "color": C.ACCENT,    "glow": C.ACCENT},
+            {"title": "The Logic",    "sub": "DECISION",     "num": 2, "color": C.ACCENT_BR, "glow": C.ACCENT_BR},
+            {"title": "Knowledge",    "sub": "DATABASE",     "num": 3, "color": C.ACCENT_BR, "glow": C.ACCENT_BR},
+            {"title": "The Brain",    "sub": "MEMORY",       "num": 4, "color": C.VIOLET,    "glow": C.VIOLET},
+            {"title": "Task Core",    "sub": "EXECUTOR",     "num": 5, "color": C.VIOLET,    "glow": C.VIOLET},
+            {"title": "The Goal",     "sub": "OUTPUT",       "num": 6, "color": "#ff3a5c",   "glow": "#ff3a5c"},
+        ]
+        n = len(cards)
 
-        # ── Spectrum bars region ──
-        bar_area_x = x + 14
-        bar_area_y = y + 42
-        bar_area_w = w - 28
-        bar_area_h = (h - 42 - 36)
-        # Background grid (dB lines)
-        grid_pen = QPen(qcol(prim, 35), 0.6, Qt.PenStyle.DashLine)
-        p.setPen(grid_pen)
-        for frac in (0.25, 0.5, 0.75, 1.0):
-            gy = bar_area_y + bar_area_h * (1.0 - frac)
-            p.drawLine(QPointF(bar_area_x, gy), QPointF(bar_area_x + bar_area_w, gy))
-        # Center line (zero)
-        p.setPen(QPen(qcol(prim, 80), 0.8))
-        p.drawLine(QPointF(bar_area_x, bar_area_y + bar_area_h / 2),
-                   QPointF(bar_area_x + bar_area_w, bar_area_y + bar_area_h / 2))
+        # ── Layout ──
+        margin = 8
+        top_margin = 8
+        card_gap = 8
+        arrow_w = 14
+        avail_w = w - margin * 2
+        card_w = int((avail_w - (n - 1) * (card_gap + arrow_w)) / n)
+        card_h = h - top_margin - margin - 6
+        card_y = y + top_margin
+        card_x_start = x + margin
 
-        # Bars
-        n = len(self._wave_bars)
-        gap = 1.5
-        bw = (bar_area_w - gap * (n - 1)) / n
-        # Vertical gradient from base to top
-        bar_grad = QLinearGradient(0, bar_area_y + bar_area_h, 0, bar_area_y)
-        bar_grad.setColorAt(0.0, qcol(bar_color, 60))
-        bar_grad.setColorAt(0.5, qcol(bar_color, 180))
-        bar_grad.setColorAt(1.0, qcol(bar_color, 255))
-        for i, v in enumerate(self._wave_bars):
-            bx = bar_area_x + i * (bw + gap)
-            bh = max(2.0, v * bar_area_h)
-            by = bar_area_y + bar_area_h - bh
-            bar_rect = QRectF(bx, by, bw, bh)
+        # ── Draw flow arrows between cards ──
+        for i in range(n - 1):
+            c1_x = card_x_start + i * (card_w + card_gap + arrow_w) + card_w
+            ax = c1_x + card_gap
+            ay = card_y + card_h / 2
+            a_end = ax + arrow_w
+
+            p.setPen(QPen(qcol(cards[i]["color"], 60), 1.5, Qt.PenStyle.DashLine))
+            p.drawLine(QPointF(ax, ay), QPointF(a_end, ay))
+
+            head_size = 5
+            p.setPen(QPen(qcol(cards[i]["color"], 100), 1.5))
+            p.setBrush(QBrush(qcol(cards[i]["color"], 120)))
+            arrow = QPolygonF([
+                QPointF(a_end, ay),
+                QPointF(a_end - head_size, ay - head_size * 0.6),
+                QPointF(a_end - head_size, ay + head_size * 0.6),
+            ])
+            p.drawPolygon(arrow)
+
+            n_particles = 3
+            for pi in range(n_particles):
+                t = ((tp * 1.5 + pi / n_particles) % 1.0)
+                px = ax + t * arrow_w
+                py = ay + 4 * math.sin(t * math.tau + tp)
+                pr = 1.5 + 1.0 * math.sin(tp * 3 + pi)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(qcol(cards[i]["color"], int(180 + 75 * math.sin(tp * 2 + pi)))))
+                p.drawEllipse(QPointF(px, py), pr, pr)
+
+        # ── Draw each card ──
+        for i, card in enumerate(cards):
+            cx = card_x_start + i * (card_w + card_gap + arrow_w)
+            cy = card_y
+            cw = card_w
+            ch = card_h
+            col = card["color"]
+            card_rect = QRectF(cx, cy, cw, ch)
+
+            glow_pulse = 0.6 + 0.4 * math.sin(tp * 2.5 + i * 0.8)
+
+            card_path = QPainterPath()
+            card_path.addRoundedRect(card_rect, 6, 6)
+            p.setPen(QPen(qcol(col, int(80 + 60 * glow_pulse)), 1.2))
+            card_bg = QLinearGradient(cx, cy, cx, cy + ch)
+            card_bg.setColorAt(0.0, qcol(col, 20))
+            card_bg.setColorAt(0.5, qcol("#0e1525", 200))
+            card_bg.setColorAt(1.0, qcol(col, 10))
+            p.setBrush(QBrush(card_bg))
+            p.drawPath(card_path)
+
+            line_rect = QRectF(cx + 6, cy + 2, cw - 12, 2)
+            line_grad = QLinearGradient(cx + 6, cy, cx + cw - 6, cy)
+            line_grad.setColorAt(0.0, qcol(col, 0))
+            line_grad.setColorAt(0.5, qcol(col, int(200 * glow_pulse)))
+            line_grad.setColorAt(1.0, qcol(col, 0))
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(bar_grad))
-            p.drawRect(bar_rect)
-            # Peak-hold cap (thin red line on top)
-            peak_v = self._wave_peak_hold[i]
-            if peak_v > 0.05:
-                peak_h = peak_v * bar_area_h
-                peak_y = bar_area_y + bar_area_h - peak_h
-                p.setPen(QPen(qcol("#ff5a4a", 220), 0.8))
-                p.drawLine(QPointF(bx, peak_y), QPointF(bx + bw, peak_y))
+            p.setBrush(QBrush(line_grad))
+            p.drawRoundedRect(line_rect, 1, 1)
 
-        # ── Oscilloscope trace at bottom ──
-        trace_y0 = bar_area_y + bar_area_h + 4
-        trace_h  = 24
-        trace_x0 = x + 14
-        trace_w  = w - 28
-        if trace_y0 + trace_h < y + h - 4:
-            # baseline
-            p.setPen(QPen(qcol(prim, 70), 0.8))
-            p.drawLine(QPointF(trace_x0, trace_y0 + trace_h / 2),
-                       QPointF(trace_x0 + trace_w, trace_y0 + trace_h / 2))
-            # build polyline
-            n_pts = 80
-            pts: list[QPointF] = []
-            for i in range(n_pts):
-                t = i / (n_pts - 1)
-                # two stacked sines modulated by level
-                amp = (0.25 + 0.75 * self._wave_level) * trace_h / 2
-                y_off = (math.sin(self._wave_phase + t * 8.0) * 0.6
-                         + math.sin(self._wave_phase * 1.3 + t * 14.0) * 0.3
-                         + math.sin(self._wave_phase * 0.7 + t * 3.0) * 0.1)
-                px = trace_x0 + t * trace_w
-                py = trace_y0 + trace_h / 2 + y_off * amp
-                pts.append(QPointF(px, py))
-            # glow underlay
-            p.setPen(QPen(qcol(line_color, 90), 3.5))
-            p.drawPolyline(QPolygonF(pts))
-            # main line
-            p.setPen(QPen(qcol(line_color, 230), 1.2))
-            p.drawPolyline(QPolygonF(pts))
+            # ── Icon ──
+            icon_cx = cx + cw / 2
+            icon_y = cy + 16
+            icon_size = 18
 
-        # ── Corner brackets ──
-        m = 5
-        p.setPen(QPen(qcol(bar_color, 220), 0.8))
-        for (bx, by, dx, dy) in [
-            (x + 2,        y + 2,        1,  1),
-            (x + w - 2,    y + 2,       -1,  1),
-            (x + 2,        y + h - 2,    1, -1),
-            (x + w - 2,    y + h - 2,   -1, -1),
-        ]:
-            p.drawLine(QPointF(bx, by), QPointF(bx + m * dx, by))
-            p.drawLine(QPointF(bx, by), QPointF(bx, by + m * dy))
+            if i == 0:  # Bullseye
+                p.setPen(QPen(qcol(col, 180), 1.2))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawEllipse(QPointF(icon_cx, icon_y), icon_size, icon_size)
+                p.drawEllipse(QPointF(icon_cx, icon_y), icon_size * 0.6, icon_size * 0.6)
+                p.drawEllipse(QPointF(icon_cx, icon_y), icon_size * 0.25, icon_size * 0.25)
+                p.drawLine(QPointF(icon_cx - icon_size * 1.2, icon_y),
+                           QPointF(icon_cx + icon_size * 1.2, icon_y))
+                p.drawLine(QPointF(icon_cx, icon_y - icon_size * 1.2),
+                           QPointF(icon_cx, icon_y + icon_size * 1.2))
 
-        # ── Footer hint ──
-        p.setFont(QFont("Consolas", 6))
-        p.setPen(QPen(qcol(prim, 160), 1))
-        p.drawText(QRectF(x + 12, y + h - 14, w - 24, 12),
-                   Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                   "click panel to cycle source  •  idle / user mic / aegis tts")
-        self._wave_label_rect = QRectF(x + 12, y + h - 14, w - 24, 12)
+            elif i == 1:  # Logic gate (AND)
+                gs = icon_size
+                gpath = QPainterPath()
+                gpath.moveTo(icon_cx - gs, icon_y - gs * 0.7)
+                gpath.lineTo(icon_cx - gs, icon_y + gs * 0.7)
+                gpath.lineTo(icon_cx, icon_y + gs * 0.7)
+                gpath.cubicTo(icon_cx + gs * 0.8, icon_y + gs * 0.7,
+                             icon_cx + gs * 0.8, icon_y - gs * 0.7,
+                             icon_cx, icon_y - gs * 0.7)
+                gpath.closeSubpath()
+                p.setPen(QPen(qcol(col, 180), 1.2))
+                p.setBrush(QBrush(qcol(col, 30)))
+                p.drawPath(gpath)
+
+            elif i == 2:  # Database (stacked cylinders)
+                db_w = icon_size * 1.4
+                db_h = icon_size * 0.6
+                for di in range(3):
+                    dby = icon_y - db_h * 0.6 + di * db_h * 0.5
+                    db_path = QPainterPath()
+                    db_path.addRoundedRect(QRectF(icon_cx - db_w / 2, dby, db_w, db_h), db_h / 2, db_h / 2)
+                    p.setPen(QPen(qcol(col, int(140 - di * 20)), 1.0))
+                    p.setBrush(QBrush(qcol(col, int(25 - di * 5))))
+                    p.drawPath(db_path)
+
+            elif i == 3:  # Brain with circuits
+                br = icon_size
+                p.setPen(QPen(qcol(col, 160), 1.2))
+                p.setBrush(QBrush(qcol(col, 25)))
+                p.drawEllipse(QPointF(icon_cx - br * 0.35, icon_y), br * 0.55, br * 0.8)
+                p.drawEllipse(QPointF(icon_cx + br * 0.35, icon_y), br * 0.55, br * 0.8)
+                p.setPen(QPen(qcol(col, 100), 0.8))
+                p.drawLine(QPointF(icon_cx - br * 0.8, icon_y - br * 0.3),
+                          QPointF(icon_cx - br * 1.3, icon_y - br * 0.1))
+                p.drawLine(QPointF(icon_cx + br * 0.8, icon_y + br * 0.3),
+                          QPointF(icon_cx + br * 1.3, icon_y + br * 0.1))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(qcol(col, 180)))
+                p.drawEllipse(QPointF(icon_cx - br * 1.3, icon_y - br * 0.1), 2, 2)
+                p.drawEllipse(QPointF(icon_cx + br * 1.3, icon_y + br * 0.1), 2, 2)
+
+            elif i == 4:  # Gear
+                g = icon_size
+                p.setPen(QPen(qcol(col, 160), 1.2))
+                p.setBrush(QBrush(qcol(col, 25)))
+                p.drawEllipse(QPointF(icon_cx, icon_y), g * 0.7, g * 0.7)
+                p.setPen(QPen(qcol(col, 140), 1.5))
+                for ti in range(8):
+                    ta = ti * math.tau / 8 + tp * 0.5
+                    tx1 = icon_cx + g * 0.7 * math.cos(ta)
+                    ty1 = icon_y + g * 0.7 * math.sin(ta)
+                    tx2 = icon_cx + g * 0.95 * math.cos(ta)
+                    ty2 = icon_y + g * 0.95 * math.sin(ta)
+                    p.drawLine(QPointF(tx1, ty1), QPointF(tx2, ty2))
+                p.setPen(QPen(qcol(col, 100), 0.8))
+                p.setBrush(QBrush(qcol("#0e1525", 200)))
+                p.drawEllipse(QPointF(icon_cx, icon_y), g * 0.3, g * 0.3)
+
+            elif i == 5:  # Rocket
+                rk = icon_size * 1.1
+                rpath = QPainterPath()
+                rpath.moveTo(icon_cx, icon_y - rk)
+                rpath.lineTo(icon_cx - rk * 0.4, icon_y + rk * 0.2)
+                rpath.lineTo(icon_cx - rk * 0.15, icon_y + rk * 0.2)
+                rpath.lineTo(icon_cx - rk * 0.15, icon_y + rk * 0.7)
+                rpath.lineTo(icon_cx + rk * 0.15, icon_y + rk * 0.7)
+                rpath.lineTo(icon_cx + rk * 0.15, icon_y + rk * 0.2)
+                rpath.lineTo(icon_cx + rk * 0.4, icon_y + rk * 0.2)
+                rpath.closeSubpath()
+                p.setPen(QPen(qcol(col, 180), 1.2))
+                p.setBrush(QBrush(qcol(col, 30)))
+                p.drawPath(rpath)
+                flame = QPainterPath()
+                flame.moveTo(icon_cx - rk * 0.1, icon_y + rk * 0.7)
+                flame.cubicTo(icon_cx - rk * 0.2, icon_y + rk * 1.0 + 4 * math.sin(tp * 4),
+                             icon_cx + rk * 0.2, icon_y + rk * 1.0 + 4 * math.sin(tp * 4 + 1),
+                             icon_cx + rk * 0.1, icon_y + rk * 0.7)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(qcol(col, 120)))
+                p.drawPath(flame)
+
+            # ── Title ──
+            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
+            p.setPen(QPen(qcol(col, 220), 1))
+            title_rect = QRectF(cx + 2, icon_y + 16, cw - 4, 14)
+            p.drawText(title_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                       card["title"])
+
+            # ── Subtitle ──
+            p.setFont(QFont("Consolas", 5))
+            p.setPen(QPen(qcol(col, 120), 1))
+            sub_rect = QRectF(cx + 2, icon_y + 28, cw - 4, 10)
+            p.drawText(sub_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                       card["sub"])
+
+            # ── Data text ──
+            data_texts = [
+                ["req: 12", "perf: 94%"],
+                ["if→then", "chk: OK"],
+                ["docs: 8", "cloud: 3"],
+                ["ctx: 2.1k", "mem: 87%"],
+                ["run: ✓", "code: 4"],
+                ["status:", "SUCCESS"],
+            ]
+            p.setFont(QFont("Consolas", 5))
+            p.setPen(QPen(qcol(C.TEXT_DIM, 140), 1))
+            for li, dt in enumerate(data_texts[i]):
+                dr = QRectF(cx + 4, icon_y + 38 + li * 9, cw - 8, 8)
+                p.drawText(dr, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, dt)
+
+            # ── Glowing number circle at bottom ──
+            num_y = cy + ch - 12
+            num_r = 8
+            num_glow = 0.7 + 0.3 * math.sin(tp * 3 + i * 1.2)
+            p.setPen(QPen(qcol(col, int(180 + 75 * num_glow)), 1.2))
+            p.setBrush(QBrush(qcol(col, int(20 + 15 * num_glow))))
+            p.drawEllipse(QPointF(icon_cx, num_y), num_r, num_r)
+            p.setFont(QFont("Consolas", 6, QFont.Weight.Bold))
+            p.setPen(QPen(qcol(col, 230), 1))
+            p.drawText(QRectF(icon_cx - num_r, num_y - num_r, num_r * 2, num_r * 2),
+                       Qt.AlignmentFlag.AlignCenter, str(card["num"]))
 
 
     # ── Dynamic Island (mode container) ──────────────────────────────
@@ -2871,7 +2929,7 @@ class SciFiHud(QWidget):
         if scr_w > 25 and scr_h > 20:
             self._draw_laptop_screen(p, scr_pts, scale)
 
-        # ── JARVIS glow underneath ──
+        # ── AEGIS glow underneath ──
         glow_r = max(W, D) * 1.3
         glow = QRadialGradient(QPointF(cx, cy + Hb * 1.2), glow_r)
         glow.setColorAt(0.0, qcol(C.ACCENT, 40))
@@ -3812,7 +3870,7 @@ class SciFiHud(QWidget):
             p.setPen(QPen(qcol(C.TEXT_MUTED, 200), 1))
             p.drawText(QRectF(x, y + 32, w, 30),
                        Qt.AlignmentFlag.AlignCenter,
-                       "No tools invoked yet.\nAsk JARVIS to do something.")
+                       "No tools invoked yet.\nAsk AEGIS to do something.")
             return
         max_count = max(c for _, c in items)
         row_h = 18
@@ -4190,7 +4248,7 @@ class SciFiHud(QWidget):
                     n_lines = max(2, len(txt) // 32 + 1)
                     bh = 22 + n_lines * line_h
                     if cur_y + bh > msg_y + msg_h: break
-                    self._msg_bubble(p, x + 30, cur_y, avail, bh, txt, t, "JARVIS", is_user=False)
+                    self._msg_bubble(p, x + 30, cur_y, avail, bh, txt, t, "AEGIS", is_user=False)
                 elif kind == "error":
                     p.setFont(QFont("Courier New", 8))
                     p.setPen(QPen(qcol(C.DANGER, 200), 1))
@@ -5013,7 +5071,7 @@ class SetupOverlay(QWidget):
             return w
 
         layout.addWidget(_lbl("?  INITIALISATION REQUIRED", 13, True, C.ACCENT))
-        layout.addWidget(_lbl("Configure J.A.R.V.I.S. before first boot.", 9, color=C.TEXT_DIM))
+        layout.addWidget(_lbl("Configure AEGIS before first boot.", 9, color=C.TEXT_DIM))
         layout.addSpacing(6)
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet("color: " + C.BORDER + ";"); layout.addWidget(sep)
@@ -5101,7 +5159,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, face_path):
         super().__init__()
-        self.setWindowTitle("STARK  -  MARK XXXIX")
+        self.setWindowTitle("AEGIS  -  MARK XXXIX")
         self.setWindowIcon(QIcon(str(BASE_DIR / "app_icon.png")))
         self.setMinimumSize(_MIN_W, _MIN_H)
         self.resize(_DEFAULT_W, _DEFAULT_H)
@@ -5181,7 +5239,7 @@ class MainWindow(QMainWindow):
             if val == "reactor":
                 self._log_sig.emit("SYS: Arc reactor pinged - core nominal")
             else:
-                self._log_sig.emit("JARVIS: Visual hub activated - awaiting image input")
+                self._log_sig.emit("AEGIS: Visual hub activated - awaiting image input")
             return
         if kind == "card":
             label = val.replace("_", " ").upper()
@@ -5254,8 +5312,16 @@ class MainWindow(QMainWindow):
 
     def _on_setup_done(self, key, os_name):
         os.makedirs(CONFIG_DIR, exist_ok=True)
+        data = {}
+        if API_FILE.exists():
+            try:
+                data = json.loads(API_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                data = {}
+        data["gemini_api_key"] = key
+        data["os_system"] = os_name
         API_FILE.write_text(
-            json.dumps({"gemini_api_key": key, "os_system": os_name}, indent=4),
+            json.dumps(data, indent=4, ensure_ascii=False),
             encoding="utf-8",
         )
         self._ready = True
@@ -5264,7 +5330,7 @@ class MainWindow(QMainWindow):
             self._overlay.hide()
             self._overlay = None
         self._apply_state("LISTENING")
-        print("SYS: Initialised. OS=" + os_name.upper() + ". JARVIS online.")
+        print("SYS: Initialised. OS=" + os_name.upper() + ". Aegis online.")
 
     def set_audio_level(self, level: float):
         self.hud.set_audio_level(level)
