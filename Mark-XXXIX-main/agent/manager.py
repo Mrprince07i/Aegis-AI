@@ -1,5 +1,6 @@
 import json
 import threading
+import traceback
 import time
 from typing import Callable
 from agent.base_agent import BaseAgent, AgentContext
@@ -39,9 +40,6 @@ class AgentManager:
         self._current_context = context
 
         # Phase 1: Analysis (A1 + A2)
-        if speak:
-            speak("Starting multi-agent analysis, sir.")
-
         context = self.agents["target"].run(context, speak)
         if progress_cb:
             progress_cb("target", "completed")
@@ -51,9 +49,6 @@ class AgentManager:
             progress_cb("logic", "completed")
 
         # Phase 2: Research & Memory (A3 + A4) - parallel
-        if speak:
-            speak("Gathering intelligence and context.")
-
         t1 = threading.Thread(target=lambda: self._run_agent_safe("knowledge", context, speak, progress_cb))
         t2 = threading.Thread(target=lambda: self._run_agent_safe("brain", context, speak, progress_cb))
         t1.start(); t2.start()
@@ -70,6 +65,14 @@ class AgentManager:
             progress_cb("validator", "completed")
 
         self._current_context = context
+
+        if context.errors:
+            errs = "; ".join(context.errors[-3:])
+            return f"Task completed with warnings: {errs}"
+
+        if not context.final_output:
+            context = self.agents["validator"].run(context, speak)
+
         return context.final_output or "Task completed, sir."
 
     def _run_agent_safe(self, name: str, context: AgentContext,
@@ -77,7 +80,10 @@ class AgentManager:
         try:
             self.agents[name].run(context, speak)
         except Exception as e:
+            err = f"{name} failed: {e}"
+            context.errors.append(err)
             context.status[name] = f"failed: {e}"
+            traceback.print_exc()
         if progress_cb:
             progress_cb(name, context.status.get(name, "completed"))
 

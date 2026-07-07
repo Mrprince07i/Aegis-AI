@@ -32,9 +32,6 @@ class TargetAgent(BaseAgent):
 
     def run(self, context: AgentContext, speak=None) -> AgentContext:
         context.status[self.name] = "running"
-        if speak:
-            speak(f"Analyzing your request, sir.")
-
         prompt = f"Analyze this user goal:\n\n{context.goal}"
         result = self._ask_llm(prompt)
 

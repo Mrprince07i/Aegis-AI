@@ -1229,10 +1229,14 @@ class AegisLive:
                 mgr = get_manager()
                 def progress(name, status):
                     self.ui._agent_status = mgr.get_pipeline_status()
-                result = await loop.run_in_executor(
-                    None,
-                    lambda: mgr.run_pipeline(goal=goal, speak=self.speak, progress_cb=progress)
-                )
+                try:
+                    result = await loop.run_in_executor(
+                        None,
+                        lambda: mgr.run_pipeline(goal=goal, speak=None, progress_cb=progress)
+                    )
+                except Exception as e:
+                    result = f"Pipeline error: {e}"
+                    traceback.print_exc()
 
             elif name == "web_search":
                 r = await loop.run_in_executor(None, lambda: web_search_action(parameters=args, player=self.ui))

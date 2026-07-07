@@ -87,9 +87,6 @@ class ExecutorAgent(BaseAgent):
 
     def run(self, context: AgentContext, speak=None) -> AgentContext:
         context.status[self.name] = "running"
-        if speak:
-            speak("Executing the plan, sir.")
-
         steps = context.plan if isinstance(context.plan, list) else []
         results = []
 
@@ -103,9 +100,6 @@ class ExecutorAgent(BaseAgent):
             if not tool:
                 results.append(f"[No tool specified for: {desc}]")
                 continue
-
-            if speak:
-                speak(f"Running: {desc[:50]}")
 
             result = _call_tool(tool, params)
             results.append(f"[{tool}] {desc[:60]}: {result[:100]}")

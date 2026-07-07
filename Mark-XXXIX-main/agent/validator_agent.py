@@ -22,9 +22,6 @@ class ValidatorAgent(BaseAgent):
 
     def run(self, context: AgentContext, speak=None) -> AgentContext:
         context.status[self.name] = "running"
-        if speak:
-            speak("Validating results, sir.")
-
         execution = "\n".join(context.execution_results[-5:]) if context.execution_results else "No steps executed"
         research = context.research[-1] if context.research else ""
         memory = context.memory[-1] if context.memory else ""

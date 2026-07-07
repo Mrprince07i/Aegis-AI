@@ -46,9 +46,6 @@ class LogicAgent(BaseAgent):
 
     def run(self, context: AgentContext, speak=None) -> AgentContext:
         context.status[self.name] = "running"
-        if speak:
-            speak("Creating execution plan, sir.")
-
         target_info = context.plan[0] if context.plan else {}
         prompt = f"Goal: {context.goal}\n\nTarget analysis:\n{json.dumps(target_info, indent=2)}\n\nCreate a detailed step-by-step plan."  # noqa: E501
         import json

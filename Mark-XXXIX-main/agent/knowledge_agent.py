@@ -29,9 +29,6 @@ class KnowledgeAgent(BaseAgent):
 
     def run(self, context: AgentContext, speak=None) -> AgentContext:
         context.status[self.name] = "running"
-        if speak:
-            speak("Searching for information, sir.")
-
         plan_steps = context.plan if isinstance(context.plan, list) else []
         search_queries = []
         for step in plan_steps:

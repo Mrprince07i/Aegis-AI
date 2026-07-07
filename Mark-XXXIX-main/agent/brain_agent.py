@@ -24,9 +24,6 @@ class BrainAgent(BaseAgent):
 
     def run(self, context: AgentContext, speak=None) -> AgentContext:
         context.status[self.name] = "running"
-        if speak:
-            speak("Checking relevant memories, sir.")
-
         try:
             from memory.memory_manager import recall_memory, save_memory
             stored = recall_memory(context.goal)
