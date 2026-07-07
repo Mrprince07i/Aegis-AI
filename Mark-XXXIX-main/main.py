@@ -194,7 +194,7 @@ TOOL_DECLARATIONS = [
             "Controls the computer: volume, brightness, window management, keyboard shortcuts, "
             "typing text on screen, closing apps, fullscreen, dark mode, WiFi, restart, shutdown, "
             "scrolling, tab management, zoom, screenshots, lock screen, refresh/reload page. "
-            "Use for ANY single computer control command. NEVER route to agent_task."
+            "Use for ANY single computer control command."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -301,28 +301,12 @@ TOOL_DECLARATIONS = [
         }
     },
     {
-        "name": "agent_task",
-        "description": (
-            "Legacy simple task executor for basic multi-step tasks. "
-            "For COMPLEX tasks requiring research, memory, planning, or multiple specialized capabilities, "
-            "use 'agent_delegate' instead."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "goal":     {"type": "STRING", "description": "Complete description of what to accomplish"},
-                "priority": {"type": "STRING", "description": "low | normal | high (default: normal)"}
-            },
-            "required": ["goal"]
-        }
-    },
-    {
         "name": "agent_delegate",
         "description": (
-            "THE PRIMARY tool for complex or hard tasks. Delegates to 6 specialized agents "
-            "(Target, Logic, Knowledge, Brain, Executor, Validator) who work together "
-            "to accomplish the goal. Use for: research, analysis, multi-step workflows, "
-            "creative tasks, problem-solving. Do NOT use for simple single-command tasks."
+            "MANDATORY tool for ANY task beyond a simple greeting or single command. "
+            "Delegates to 6 specialized agents (Target→Logic→Knowledge+Brain→Executor→Validator) "
+            "who work together on research, analysis, planning, creative work, multi-step tasks, "
+            "problem-solving, or anything requiring thinking. Call this for every non-trivial request."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -364,7 +348,7 @@ TOOL_DECLARATIONS = [
             "Use for: installing, downloading, updating games, listing installed games, "
             "checking download status, scheduling updates. "
             "ALWAYS call directly for any Steam/Epic/game request. "
-            "NEVER use agent_task, browser_control, or web_search for Steam/Epic."
+            "NEVER use browser_control or web_search for Steam/Epic."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -1237,13 +1221,6 @@ class AegisLive:
             elif name == "dev_agent":
                 r = await loop.run_in_executor(None, lambda: dev_agent(parameters=args, player=self.ui, speak=self.speak))
                 result = r or "Done."
-
-            elif name == "agent_task":
-                from agent.task_queue import get_queue, TaskPriority
-                priority_map = {"low": TaskPriority.LOW, "normal": TaskPriority.NORMAL, "high": TaskPriority.HIGH}
-                priority = priority_map.get(args.get("priority", "normal").lower(), TaskPriority.NORMAL)
-                task_id  = get_queue().submit(goal=args.get("goal", ""), priority=priority, speak=self.speak)
-                result   = f"Task started (ID: {task_id})."
 
             elif name == "agent_delegate":
                 from agent.manager import get_manager
