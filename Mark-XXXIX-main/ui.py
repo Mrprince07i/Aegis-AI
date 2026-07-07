@@ -1778,18 +1778,24 @@ class SciFiHud(QWidget):
         card_x_start = x + margin
 
         # ── Draw flow arrows between cards ──
+        agent_keys = ["target", "logic", "knowledge", "brain", "executor", "validator"]
         for i in range(n - 1):
             c1_x = card_x_start + i * (card_w + card_gap + arrow_w) + card_w
             ax = c1_x + card_gap
             ay = card_y + card_h / 2
             a_end = ax + arrow_w
 
-            p.setPen(QPen(qcol(cards[i]["color"], 60), 1.5, Qt.PenStyle.DashLine))
+            next_status = self._agent_status.get(agent_keys[i + 1], "idle")
+            is_active = next_status == "running"
+            arrow_alpha = 120 if is_active else 60
+            n_particles = 5 if is_active else 3
+
+            p.setPen(QPen(qcol(cards[i]["color"], arrow_alpha), 1.5, Qt.PenStyle.DashLine))
             p.drawLine(QPointF(ax, ay), QPointF(a_end, ay))
 
             head_size = 5
-            p.setPen(QPen(qcol(cards[i]["color"], 100), 1.5))
-            p.setBrush(QBrush(qcol(cards[i]["color"], 120)))
+            p.setPen(QPen(qcol(cards[i]["color"], arrow_alpha + 40), 1.5))
+            p.setBrush(QBrush(qcol(cards[i]["color"], arrow_alpha + 60)))
             arrow = QPolygonF([
                 QPointF(a_end, ay),
                 QPointF(a_end - head_size, ay - head_size * 0.6),
@@ -1797,17 +1803,19 @@ class SciFiHud(QWidget):
             ])
             p.drawPolygon(arrow)
 
-            n_particles = 3
             for pi in range(n_particles):
                 t = ((tp * 1.5 + pi / n_particles) % 1.0)
                 px = ax + t * arrow_w
                 py = ay + 4 * math.sin(t * math.tau + tp)
                 pr = 1.5 + 1.0 * math.sin(tp * 3 + pi)
+                if is_active:
+                    pr = 2.0 + 1.5 * math.sin(tp * 5 + pi)
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QBrush(qcol(cards[i]["color"], int(180 + 75 * math.sin(tp * 2 + pi)))))
                 p.drawEllipse(QPointF(px, py), pr, pr)
 
         # ── Draw each card ──
+        agent_keys = ["target", "logic", "knowledge", "brain", "executor", "validator"]
         for i, card in enumerate(cards):
             cx = card_x_start + i * (card_w + card_gap + arrow_w)
             cy = card_y
@@ -1816,15 +1824,45 @@ class SciFiHud(QWidget):
             col = card["color"]
             card_rect = QRectF(cx, cy, cw, ch)
 
+            # Check agent status
+            status = self._agent_status.get(agent_keys[i], "idle")
+            is_running = status == "running"
+            is_completed = status == "completed"
+            is_failed = "failed" in status
+
             glow_pulse = 0.6 + 0.4 * math.sin(tp * 2.5 + i * 0.8)
+            if is_running:
+                glow_pulse = 0.8 + 0.4 * math.sin(tp * 6.0 + i * 1.5)
+
+            # ── Strong outer glow ring for running agent ──
+            if is_running:
+                glow_r = 6 + 3 * math.sin(tp * 5 + i * 1.2)
+                for g in range(3, 0, -1):
+                    gr = QRectF(cx - g * 2, cy - g * 2, cw + g * 4, ch + g * 4)
+                    gp = QPainterPath()
+                    gp.addRoundedRect(gr, 6 + g, 6 + g)
+                    alpha = int(40 - g * 10 + 30 * math.sin(tp * 4 + i + g))
+                    p.setPen(QPen(qcol(col, alpha), 1.5))
+                    p.setBrush(Qt.BrushStyle.NoBrush)
+                    p.drawPath(gp)
 
             card_path = QPainterPath()
             card_path.addRoundedRect(card_rect, 6, 6)
-            p.setPen(QPen(qcol(col, int(80 + 60 * glow_pulse)), 1.2))
+            border_alpha = int(80 + 60 * glow_pulse)
+            if is_running:
+                border_alpha = int(180 + 75 * math.sin(tp * 6 + i))
+            elif is_completed:
+                border_alpha = 160
+            p.setPen(QPen(qcol(col, border_alpha), 1.2))
             card_bg = QLinearGradient(cx, cy, cx, cy + ch)
-            card_bg.setColorAt(0.0, qcol(col, 20))
-            card_bg.setColorAt(0.5, qcol("#0e1525", 200))
-            card_bg.setColorAt(1.0, qcol(col, 10))
+            if is_running:
+                card_bg.setColorAt(0.0, qcol(col, 50))
+                card_bg.setColorAt(0.5, qcol("#0e1525", 220))
+                card_bg.setColorAt(1.0, qcol(col, 30))
+            else:
+                card_bg.setColorAt(0.0, qcol(col, 20))
+                card_bg.setColorAt(0.5, qcol("#0e1525", 200))
+                card_bg.setColorAt(1.0, qcol(col, 10))
             p.setBrush(QBrush(card_bg))
             p.drawPath(card_path)
 
