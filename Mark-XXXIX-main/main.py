@@ -56,7 +56,7 @@ LIVE_MODEL          = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 CHANNELS            = 1
 SEND_SAMPLE_RATE    = 16000
 RECEIVE_SAMPLE_RATE = 24000
-CHUNK_SIZE          = 1024
+CHUNK_SIZE          = 4096
 
 def _get_api_key() -> str:
     with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -1073,7 +1073,7 @@ class AegisLive:
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name="Charon"
+                        voice_name="Fenrir"
                     )
                 )
             ),
@@ -1485,9 +1485,11 @@ class AegisLive:
             samplerate=RECEIVE_SAMPLE_RATE,
             channels=CHANNELS,
             dtype="int16",
-            blocksize=CHUNK_SIZE,
+            blocksize=CHUNK_SIZE * 2,
         )
         stream.start()
+
+        pre_buffer = []
 
         try:
             while True:
@@ -1496,7 +1498,18 @@ class AegisLive:
                         self.audio_in_queue.get(),
                         timeout=0.1
                     )
+                    pre_buffer.append(chunk)
+                    if len(pre_buffer) < 3:
+                        continue
+                    for buf_chunk in pre_buffer:
+                        self.set_speaking(True)
+                        await asyncio.to_thread(stream.write, buf_chunk)
+                    pre_buffer = []
                 except asyncio.TimeoutError:
+                    if pre_buffer:
+                        for buf_chunk in pre_buffer:
+                            await asyncio.to_thread(stream.write, buf_chunk)
+                        pre_buffer = []
                     if (
                         self._turn_done_event
                         and self._turn_done_event.is_set()
