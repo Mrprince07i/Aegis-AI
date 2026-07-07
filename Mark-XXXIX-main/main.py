@@ -56,7 +56,8 @@ LIVE_MODEL          = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 CHANNELS            = 1
 SEND_SAMPLE_RATE    = 16000
 RECEIVE_SAMPLE_RATE = 24000
-CHUNK_SIZE          = 4096
+CHUNK_SIZE          = 8192
+AUDIO_PREBUFFER     = 2
 
 def _get_api_key() -> str:
     with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -747,6 +748,9 @@ class AegisLive:
         self.session        = None
         self.audio_in_queue = None
         self.out_queue      = None
+        self._audio_write_queue = None
+        self._audio_write_thread = None
+        self._audio_write_stop = threading.Event()
         self._loop          = None
         self._is_speaking   = False
         self._speaking_lock = threading.Lock()
@@ -1073,7 +1077,7 @@ class AegisLive:
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name="Fenrir"
+                        voice_name="Puck"
                     )
                 )
             ),
@@ -1480,17 +1484,40 @@ class AegisLive:
 
     async def _play_audio(self):
         print("[AEGIS] 🔊 Play started")
-
+        
         stream = sd.RawOutputStream(
             samplerate=RECEIVE_SAMPLE_RATE,
             channels=CHANNELS,
             dtype="int16",
-            blocksize=CHUNK_SIZE * 2,
+            blocksize=CHUNK_SIZE,
         )
         stream.start()
-
-        pre_buffer = []
-
+        
+        import queue as q
+        self._audio_write_queue = q.Queue()
+        self._audio_write_stop.clear()
+        
+        def _writer(stream_ref, stop_event, queue_ref):
+            try:
+                while not stop_event.is_set():
+                    try:
+                        chunk = queue_ref.get(timeout=0.2)
+                        if chunk is None:
+                            break
+                        stream_ref.write(chunk)
+                    except q.Empty:
+                        pass
+            except Exception:
+                pass
+        
+        writer_thread = threading.Thread(
+            target=_writer,
+            args=(stream, self._audio_write_stop, self._audio_write_queue),
+            daemon=True
+        )
+        writer_thread.start()
+        self._audio_write_thread = writer_thread
+        
         try:
             while True:
                 try:
@@ -1498,18 +1525,7 @@ class AegisLive:
                         self.audio_in_queue.get(),
                         timeout=0.1
                     )
-                    pre_buffer.append(chunk)
-                    if len(pre_buffer) < 3:
-                        continue
-                    for buf_chunk in pre_buffer:
-                        self.set_speaking(True)
-                        await asyncio.to_thread(stream.write, buf_chunk)
-                    pre_buffer = []
                 except asyncio.TimeoutError:
-                    if pre_buffer:
-                        for buf_chunk in pre_buffer:
-                            await asyncio.to_thread(stream.write, buf_chunk)
-                        pre_buffer = []
                     if (
                         self._turn_done_event
                         and self._turn_done_event.is_set()
@@ -1519,7 +1535,9 @@ class AegisLive:
                         self._turn_done_event.clear()
                     self.ui.set_audio_level(0.0)
                     continue
+                
                 self.set_speaking(True)
+                
                 try:
                     import struct
                     samples = struct.unpack("<" + "h" * (len(chunk) // 2), chunk)
@@ -1532,13 +1550,17 @@ class AegisLive:
                     self.ui.set_audio_level(level)
                 except Exception:
                     pass
-                await asyncio.to_thread(stream.write, chunk)
+                
+                self._audio_write_queue.put(chunk)
         except Exception as e:
             print(f"[AEGIS] ❌ Play: {e}")
             raise
         finally:
             self.set_speaking(False)
             self.ui.set_audio_level(0.0)
+            self._audio_write_queue.put(None)
+            if writer_thread.is_alive():
+                writer_thread.join(timeout=2)
             stream.stop()
             stream.close()
 
