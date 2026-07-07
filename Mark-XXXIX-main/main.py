@@ -301,17 +301,17 @@ TOOL_DECLARATIONS = [
         }
     },
     {
-        "name": "agent_delegate",
+        "name": "agent_task",
         "description": (
-            "MANDATORY tool for ANY task beyond a simple greeting or single command. "
-            "Delegates to 6 specialized agents (Target→Logic→Knowledge+Brain→Executor→Validator) "
-            "who work together on research, analysis, planning, creative work, multi-step tasks, "
-            "problem-solving, or anything requiring thinking. Call this for every non-trivial request."
+            "Use for multi-step tasks like research, planning, analysis, or any goal "
+            "that needs multiple steps to complete. For simple one-command tasks use "
+            "the specific tool directly."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "goal": {"type": "STRING", "description": "Complete task description of what to accomplish"}
+                "goal":     {"type": "STRING", "description": "Complete description of what to accomplish"},
+                "priority": {"type": "STRING", "description": "low | normal | high (default: normal)"}
             },
             "required": ["goal"]
         }
@@ -1222,21 +1222,12 @@ class AegisLive:
                 r = await loop.run_in_executor(None, lambda: dev_agent(parameters=args, player=self.ui, speak=self.speak))
                 result = r or "Done."
 
-            elif name == "agent_delegate":
-                from agent.manager import get_manager
-                goal = args.get("goal", "")
-                self.ui.write_log(f"SYS: Deploying multi-agent pipeline for: {goal[:60]}")
-                mgr = get_manager()
-                def progress(name, status):
-                    self.ui._agent_status = mgr.get_pipeline_status()
-                try:
-                    result = await loop.run_in_executor(
-                        None,
-                        lambda: mgr.run_pipeline(goal=goal, speak=None, progress_cb=progress)
-                    )
-                except Exception as e:
-                    result = f"Pipeline error: {e}"
-                    traceback.print_exc()
+            elif name == "agent_task":
+                from agent.task_queue import get_queue, TaskPriority
+                priority_map = {"low": TaskPriority.LOW, "normal": TaskPriority.NORMAL, "high": TaskPriority.HIGH}
+                priority = priority_map.get(args.get("priority", "normal").lower(), TaskPriority.NORMAL)
+                task_id  = get_queue().submit(goal=args.get("goal", ""), priority=priority, speak=self.speak)
+                result   = f"Task started (ID: {task_id})."
 
             elif name == "web_search":
                 r = await loop.run_in_executor(None, lambda: web_search_action(parameters=args, player=self.ui))

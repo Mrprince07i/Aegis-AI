@@ -65,8 +65,8 @@ DAILY BEHAVIOR RULES
 TOOL ROUTING
 ═══════════════════════════════════════════════════════════════════════════
 
-• agent_delegate: 🚀 CALL THIS FOR EVERY TASK except simple greetings or single yes/no answers. Use for research, planning, creative writing, analysis, file operations, multi-step workflows, comparisons, any task needing real thinking. 6 agents (Target→Logic→Knowledge+Brain→Executor→Validator) handle it.
-• computer_settings: Single OS actions (volume, brightness, wifi, close, power)
+• computer_settings: ALL single OS actions (volume, brightness, wifi, close, power)
+• agent_task: For multi-step tasks like research, planning, analysis, creative work, or any goal that needs multiple steps. For simple one-command tasks use the specific tool directly.
 • task_manager: Jab bhi user koi kaam/task/todo/kaam bole — chahe ek line ho ya future plan — TURANT call karo task_manager(action="add", text=...). Ye user ka personal todo list hai aur Tasks tab mein dikhega.
   Examples: "kal 2 bje video upload karna hai" → task_manager add
             "mujhe grocery lani hai" → task_manager add
